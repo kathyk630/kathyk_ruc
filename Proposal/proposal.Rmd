@@ -1,0 +1,164 @@
+---
+title: "Web Traffic Time Series Forecasting"
+output: pdf_document
+author: Xin Kang
+date: 2019-02-26
+---
+#Introduction
+This project focuses on solving the problem of predicting the future web traffic for approximately 145,000 Wikipedia articles. Detailed data description is covered in the following section. Making future prediction on sequential or temporal observations has emerged in many key real-world problems. By forecasting the future values of multiple web traffic time series, we can answer some questions like how many severs you need in reality and what your total cost for next month is when you need to use external severs. If the performance is satisfactory, similar methods can be applied to other websites to predict their web traffic, and it can help people make smart advertisement decisions and make profit.
+
+#Data Description
+Available training dataset consists of approximately 145k time series. Each of these time series represents a number of daily views of a different Wikipedia article, starting from July, 1st, 2015 up until June 30th, 2017. And the test dataset consists of times series ranging from July 1st, 2017 to September 10th, 2017. There are different types of traffic. For each time series, we are provided the name of the article as well as the type of traffic that this time series represent (all, mobile, desktop, spider). Unfortunately, the data source for this dataset does not distinguish between traffic values of zero and missing values. A missing value may mean the traffic was zero or that the data is not available for that day.
+
+data.csv - contains traffic data. This is a csv file where each row corresponds to a particular article and each column correspond to a particular date. Some entries are missing data. The page names contain the Wikipedia project (e.g. en.wikipedia.org), type of access (e.g. desktop) and type of agent (e.g. spider). In other words, each article name has the following format: 'name_project_access_agent' (e.g. 'AKB48_zh.wikipedia.org_all-access_spider'). This data file contains times serises starting from July 1st, 2015 to September 10th, 2017, we need to divide it into training set and test set as indicated above.
+
+key.csv - gives the mapping between the page names and the shortened Id column used for prediction.
+
+#Exploratory Data Analysis
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(data.table)
+library(tibble)
+library(stringr)
+library(ggplot2)
+library(lubridate)
+library(reshape2)
+
+# key = read_csv("web-traffic-time-series-forecasting/key.csv", n_max = 100)
+data = read_csv("web-traffic-time-series-forecasting/data.csv")
+
+glimpse(key)
+head(key)
+dim(data)
+select(head(data,10), 1:5, 800:804)
+select(tail(data,10), 1:5, 800:804)
+sum(is.na(data)) / (nrow(data) * ncol(data))
+head(data$Page, 10)
+```
+Since key.csv is about 770 MB, I only load the first 100 rows to see its structure. The dimension of training set is 145063 * 804, which means it contains 145063 articles and 804 days. Let's show the first ten rows, the first five columns, and the last five columns. We can see there are many missing values in early dates, and the total is 6% missing values in the data, so we need to deal with these missing values before fitting models.
+
+Since the page names contain the Wikipedia project (e.g. en.wikipedia.org), type of access (e.g. desktop) and type of agent (e.g. spider), which may influence the web traffic of articles, it is better to divide names into four separate parts. During this process, I discover there are three types of project including wikipedia, wikimedia and mediawiki, so I need to deal with these three types separately.
+
+```{r}
+data = rownames_to_column(data)
+wikipedia = filter(data, str_detect(data$Page, "wikipedia.org")) %>% select(rowname, Page)
+nrow(wikipedia)
+wikipedia = wikipedia %>% separate(Page, into = c("first","second"), sep=".wikipedia.org_") %>% 
+  separate(first, c("name", "project"), sep=-3) %>% separate(second, c("access", "agent"), sep = "_") %>% 
+  mutate(project = str_sub(project, 2, 3))
+wikipedia[1,]
+wikimedia = filter(data, str_detect(data$Page, "wikimedia.org")) %>% select(rowname, Page)
+nrow(wikimedia)
+wikimedia = wikimedia %>% separate(Page, into = c("name", "second"), sep=".commons.wikimedia.org_") %>% 
+  separate(second, c("access", "agent"), sep = "_") %>% mutate(project = "wikimedia")
+wikimedia[1,]
+mediawiki = filter(data, str_detect(data$Page, "mediawiki.org")) %>% select(rowname, Page)
+nrow(mediawiki) 
+mediawiki = mediawiki %>% separate(Page, into = c("name", "second"), sep=".www.mediawiki.org_") %>% 
+  separate(second, c("access", "agent"), sep = "_") %>% mutate(project = "mediawiki")
+mediawiki[1,]
+nrow(mediawiki) + nrow(wikipedia) + nrow(wikimedia) == nrow(data)
+Pages = full_join(wikipedia, wikimedia,  by = c("rowname", "name", "project", "access", "agent")) %>% 
+  full_join(mediawiki,  by = c("rowname", "name", "project", "access", "agent"))
+head(Pages)
+```
+```{r}
+temp = data %>% filter(str_detect(Page, "wikipedia")) %>% select(-c(rowname, Page)) 
+wikipediaTotal = as.data.frame(t(sapply(temp, margin = 2, sum, na.rm = TRUE)))
+temp = data %>% filter(str_detect(Page, "wikimedia")) %>% select(-c(rowname, Page)) 
+wikimediaTotal = as.data.frame(t(sapply(temp, margin = 2, sum, na.rm = TRUE)))
+temp = data %>% filter(str_detect(Page, "mediawiki")) %>% select(-c(rowname, Page)) 
+mediawikiTotal = as.data.frame(t(sapply(temp, margin = 2, sum, na.rm = TRUE)))
+```
+Now we have respective total web traffic of wikipedia, wikimedia and mediawiki on every day, and want to detect their trends and compare them.
+```{r}
+wikipediaTotal = wikipediaTotal %>% t() %>% as.data.frame %>% rownames_to_column %>%
+  rename(dates = rowname, traffic = V1) %>% mutate(dates = as.Date(dates))
+wikimediaTotal = wikimediaTotal %>% t() %>% as.data.frame %>% rownames_to_column %>%
+  rename(dates = rowname, traffic = V1) %>% mutate(dates = as.Date(dates))
+mediawikiTotal = mediawikiTotal %>% t() %>% as.data.frame %>% rownames_to_column %>%
+  rename(dates = rowname, traffic = V1) %>% mutate(dates = as.Date(dates))
+ggplot(wikipediaTotal, aes(dates, traffic)) + geom_line() + geom_smooth(method = 'loess') + 
+  labs(title = "Total Web Traffic of Wikipedia")
+ggplot(wikimediaTotal, aes(dates, traffic)) + geom_line() + geom_smooth(method = 'loess') + 
+  labs(title = "Total Web Traffic of Wikimedia")
+ggplot(mediawikiTotal, aes(dates, traffic)) + geom_line() + geom_smooth(method = 'loess') + 
+  labs(title = "Total Web Traffic of Mediawiki")
+```
+Wikipedia has a much higher number of views than wikimedia and mediawiki. The web traffic of wikipedia increases a lot from 2015-07 to the end of 2016, and then decreases. Wikimedia shows a smoothly increasing trend, and the trend of mediawiki is a flat curve. There are different types of wikipedia project, one thing that might be interesting is that how these different project might affect web traffic.
+```{r}
+table(Pages$project)
+```
+We can see that there are seven languages plus wikimedia and mediawiki. The languages used here are: English, Japanese, German, French, Chinese, Russian, and Spanish.
+```{r}
+rowsnum = Pages %>% filter(project == "en") %>% select(rowname)
+english = data %>% filter(rowname %in% as.vector(t(rowsnum))) %>% select(-c(rowname, Page))
+german = data %>% filter(rowname %in% Pages$rowname[which(Pages$project == "de")])  %>% 
+  select(-c(rowname, Page))
+spanish = data %>% filter(rowname %in% Pages$rowname[which(Pages$project == "es")])  %>% 
+  select(-c(rowname, Page))
+french = data %>% filter(rowname %in% Pages$rowname[which(Pages$project == "fr")])  %>% 
+  select(-c(rowname, Page))
+japanese = data %>% filter(rowname %in% Pages$rowname[which(Pages$project == "ja")])  %>% 
+  select(-c(rowname, Page))
+russian = data %>% filter(rowname %in% Pages$rowname[which(Pages$project == "ru")])  %>% 
+  select(-c(rowname, Page))
+chinese = data %>% filter(rowname %in% Pages$rowname[which(Pages$project == "zh")])  %>% 
+  select(-c(rowname, Page))
+languages = list(english=english, german=german, spanish=spanish, french=french, 
+  japanese=japanese, russian=russian, chinese=chinese)
+langs = names(languages)
+languagesSum = list()
+for (l in langs){
+    languagesSum[[l]] = as.data.frame(t(sapply(languages[[l]], margin = 2, sum, na.rm = TRUE)))
+}
+plotLang = melt(languagesSum)
+sample_n(plotLang, 6)
+ggplot(plotLang, aes(as.Date(variable), value)) + geom_line(aes(color=L1)) + 
+  labs(x="dates", y="traffic", title = "Total Web Traffic of Different Languages")
+```
+English shows a much higher number of views. The English and Russian plots show very large spikes around 2016-08, with several more spikes in the English data later in 2016 and earlier in 2017. There are also several spikes in the Engilish data earlier in 2016. There is a clear periodic structure in the Spanish data.
+
+Next analyzing different types of access and different types of agent.
+```{r}
+table(Pages$project)
+table(Pages$access)
+table(Pages$agent)
+```
+In addition to seven languages, there are three types of access including all-access, desktop and mobile-web, and two types of agent including all-agents and spider.
+```{r}
+library(grid)
+#library(Rmisc)
+p1 = ggplot(Pages, aes(project, fill=project)) + geom_bar(show.legend = FALSE)
+p2 = ggplot(Pages, aes(access)) + geom_bar(fill = 'blue')
+p3 = ggplot(Pages, aes(agent)) + geom_bar(fill = 'blue')
+
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(2,2)))
+vplayout = function(x,y)viewport(layout.pos.row = x,layout.pos.col = y)
+print(p1,vp = vplayout(1,1:2))
+print(p2,vp = vplayout(2,1))
+print(p3,vp = vplayout(2,2))
+dev.off()
+```
+```{r}
+nrow(data)
+Data = merge(data, Pages, by = 'rowname', sort = FALSE)
+nrow(Data)
+Data = Data %>% select(-c(rowname, Page)) %>% gather(dates, traffic, -c(name, project, access, agent))
+head(Data)
+nrow(Data)
+temp = Data %>% select(dates, access, traffic) %>% group_by(dates, access) %>% 
+  summarize(views = sum(traffic, na.rm = TRUE))
+temp %>% ggplot(aes(ymd(dates), views, color = access)) + geom_line() + 
+  labs(x = "dates", y = "views", title = "Total Web Traffic of Different Access")
+temp = Data %>% select(dates, agent, traffic) %>% group_by(dates, agent) %>% 
+  summarize(views = sum(traffic, na.rm = TRUE))
+temp %>% ggplot(aes(ymd(dates), views, color = agent)) + geom_line() + 
+  labs(x = "dates", y = "views", title = "Total Web Traffic of Different Agent")
+```
+#Next Step
+After some exploratory data analyses, I need to deal with missing data, data standization, feature engineering and model fitting. I plan to try ARIMA and LSTM to predict future views for wikipedia articles, and I will also do some data interpretation like explaining the feature importance and some patterns in the data.
+  
