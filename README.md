@@ -6,10 +6,13 @@ This project focuses on solving the problem of predicting the future web traffic
 ### Data Availability
 Unfortunately, the dataset is too big to be uploaded. Here is the [link](https://www.kaggle.com/c/web-traffic-time-series-forecasting/data) to download data. 
 
+### Code
+Data processing and ARIMA fitting are done with R, and LSTM fitting is in Python.
+
 ### Shiny
 Since the dataset is really big, it takes the shinyapps.io quite a while to generate corresponding figures, and the shinyapps.io may disconnect from the server when in the bad luck (actually, this often happens). So please download the shinyApp.zip, unzip it, and run it on the RStudio by using code runApp("~/shinyApp") to see those interactive figures. 
 
-## Instructions for Use
+## Instruction for Use
 ### Reproducibility
 All data processing and analyses are reproducible, as well as all figures in the report.
 
