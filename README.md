@@ -9,4 +9,7 @@ Unfortunately, the dataset is too big to be uploaded. Here is the [link](https:/
 ### Shiny
 Since the dataset is really big, it takes the shinyapps.io quite a while to generate corresponding figures, and the shinyapps.io may disconnect from the server when in the bad luck (actually, this often happens). So please download the shinyApp.zip, unzip it, and run it on the RStudio by using code runApp("~/shinyApp") to see those interactive figures. 
 
+## Instructions for Use
+### Reproducibility
+All data processing and analyses are reproducible, as well as all figures in the report.
 Thanks.
