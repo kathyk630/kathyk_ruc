@@ -13,7 +13,7 @@ Data processing and ARIMA fitting are done with R, and LSTM fitting is in Python
 R version 3.4.0 was used for the analysis of this project. R packages including readr, plyr, dplyr, tidyr, data.table, tibble, stringr, ggplot2, lubridate, reshape2, doSNOW, doRNG, foreach, parallel, tseries, forecast.
 
 ### Shiny
-Since the dataset is really big, it takes the shinyapps.io quite a while to generate corresponding figures, and the shinyapps.io may disconnect from the server when in the bad luck (actually, this often happens). So please download the shinyApp.zip, unzip it, and run it on the RStudio by using code runApp("~/shinyApp") to see those interactive figures. 
+Since the dataset is really big, it takes the shinyapps.io quite a while to generate corresponding figures, and the shinyapps.io may disconnect from the server when in the bad luck (actually, this often happens). So please download the shinyApp.zip, unzip it, and run it on the RStudio by using code runApp("~/shinyApp") to see those interactive figures, and please also add downloaded data into the shinyApp folder before running it. 
 
 ## Instruction for Use
 ### Reproducibility
